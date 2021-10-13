@@ -1,8 +1,4 @@
-an = 0;
-ph = 0;
-fr = 0.002;
-[X, Y] = meshgrid(1 : 256);
-im = (X - 128.5) .^ 2 + (Y - 128.5) .^ 2;
-im = - im ./ (2 .* ) 
+im = zeros(256, 256);
+im(96)
 imshow(im);
-pi
+
