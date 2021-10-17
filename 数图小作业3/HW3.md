@@ -176,3 +176,95 @@ $$
 
 ### Problem2
 
+#### **1.算法要点与理论原理**
+
+通过利用指纹图像的傅里叶变换结果，找到指纹脊线的方向，并绘制在原图片上。
+
+#### 2.算法具体实现
+
+首先找到小块附近的大块边界点坐标，注意特殊判断边界条件。
+
+```matlab
+for i = 0 : ceil(X / sblock) - 1
+    for j = 0 : ceil(Y / sblock) - 1
+        % 计算以小块为中心的大块的边际点坐标+特判
+        x0 = ((i * sblock - (lblock - sblock) / 2) < 1) + ((i * sblock - (lblock - sblock) / 2) >= 1) * (i * sblock - (lblock - sblock) / 2); 
+        y0 = ((j * sblock - (lblock - sblock) / 2) < 1) + ((j * sblock - (lblock - sblock) / 2) >= 1) * (j * sblock - (lblock - sblock) / 2); 
+        x1 = ((i * sblock + (lblock - sblock) / 2 + sblock - 1) > X) * X + ((i * sblock + 23) <= X) * (i * sblock + (lblock - sblock) / 2 + sblock - 1); 
+        y1 = ((j * sblock + (lblock - sblock) / 2 + sblock - 1) > Y) * Y + ((j * sblock + 23) <= Y) * (j * sblock + (lblock - sblock) / 2 + sblock - 1); 
+        block_l = Image(x0: x1, y0: y1);
+```
+
+之后对得到的大块数据进行处理及傅里叶变换，因为傅里叶变换的结果会包含常量，因此可以先在空域对图像做减去平均值的预处理。同时，注意到待处理的图像有很多的留白区域不需要进行分析处理，可以在该部分将这些块跳过。
+
+```matlab
+block_l = block_l - mean(mean(block_l));
+if mean(mean(block_l)) <= 3
+	ROI(i + 1, j + 1) = 0;
+	Period(i + 1, j + 1) = 0;
+	continue;
+end
+%imshow(block_l)
+
+block_l = abs(fftshift(fft2(block_l)));
+```
+
+之后分析该块内的指纹脊线方向，通过课上学习到的知识与课外查询的资料知道傅里叶变换得到的两个最大值方向就是脊线的方向，而由于该值应当成对出现，故可以直接取最大的两个值进行角度与周期计算。
+
+```matlab
+while 1
+	[x, y] = find(block_l == max(max(block_l)));
+	if length(x) > 1
+		break;
+	else 
+	block_l(x, y) = 0;
+	end
+end
+ROI(i + 1, j + 1) = 1;
+Direction(i + 1, j + 1) = atand((y(1) - y(2)) / (x(1) - x(2)));
+Period(i + 1, j + 1) = 1 / sqrt((y(1) - y(2))^2 + (x(1) - x(2)) ^ 2);
+```
+
+同时以上的部分也可以采用排序后结果进行计算（未在最终代码中采用，但效果也可以）
+
+```matalb
+[block_sorted, index] = sort(block_l(:), 'descend');
+[u, v] = ind2sub(size(block_l), index(1));
+[m, n] = ind2sub(size(block_l), index(2));
+if u == m && v == n
+	Direction(i + 1, j + 1) = 0;
+	Period(i + 1, j + 1) = 0;
+	ROI(i + 1, j + 1) = 0;
+else
+	ROI(i + 1, j + 1) = 1;
+	Direction(i + 1, j + 1) = atand((n - v) / (m - u));
+	Period(i + 1, j + 1) = 4 / sqrt((n - v) ^ 2 + (m - u) ^ 2);
+end
+```
+
+之后为了更好的显示结果，通过老师提供的显示函数指定一些参数，并对周期图进行拉伸显示处理，代码如下：
+
+```matlab
+DrawDir(1, Direction, sblock, 'b', ROI);
+Period = uint8(255 / max(max(Period)) * Period); %映射到0-255
+figure(2),imshow(Period, 'InitialMagnification', 'fit');
+```
+
+#### 3.实验结果与分析
+
+<img src="HW3.assets/image-20211017214524132.png" alt="image-20211017214524132" style="zoom: 33%;" /><img src="HW3.assets/image-20211017214548623.png" alt="image-20211017214548623" style="zoom:33%;" />
+
+由上述两图可知，本代码较好地完成了题目要求绘制出了题目要求的周期图像与脊线方向，只有一些边缘位置的结果由于图像的边缘有噪声的干扰出现了一些问题，但并不影响整体结果。
+
+#### 4.遇到的困难与解决方法
+
+首先遇到的困难就是我在此之前并不是很清楚傅里叶变换在指纹识别中的作用与应用方式，在经过老师的介绍与和同学们的讨论之后，我才逐渐明白了工作原理与应用方式。在之后的调试过程中，由于已经多次应用matlab处理图像，我在完成本题的调试过程中还是比较顺利的，只是通过几次的输出图像与查看源数据的方式就解决了遇到的小问题。
+
+#### 5.收获
+
+通过本次实验，我对傅里叶变化的性质与应用有了更清晰的认识，也掌握了傅里叶变换处理图像的一般方法与一些小技巧。
+
+#### 6.可能的改进方向
+
+可以针对现在结果的边界问题加以改进算法，比如可以考虑使用一些数值分析的技巧平整边界的噪声并且使用插值法处理数据，使得结果更加准确美观。
+

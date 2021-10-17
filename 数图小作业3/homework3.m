@@ -27,23 +27,35 @@ for i = 0 : ceil(X / sblock) - 1
         block_l = block_l - mean(mean(block_l));
         if mean(mean(block_l)) <= 3
             ROI(i + 1, j + 1) = 0;
+            Period(i + 1, j + 1) = 0;
             continue;
         end
         %imshow(block_l)
         
         block_l = abs(fftshift(fft2(block_l)));
-        [block_sorted, index] = sort(block_l(:), 'descend');
-        [u, v] = ind2sub(size(block_l), index(1));
-        [m, n] = ind2sub(size(block_l), index(2));
-        if u == m && v == n
-            Direction(i + 1, j + 1) = 0;
-            Period(i + 1, j + 1) = 0;
-            ROI(i + 1, j + 1) = 0;
-        else
-            ROI(i + 1, j + 1) = 1;
-            Direction(i + 1, j + 1) = atand((n - v) / (m - u));
-            Period(i + 1, j + 1) = 4 / sqrt((n - v) ^ 2 + (m - u) ^ 2);
+        while 1
+            [x, y] = find(block_l == max(max(block_l)));
+            if length(x) > 1
+                break;
+            else 
+                block_l(x, y) = 0;
+            end
         end
+        ROI(i + 1, j + 1) = 1;
+        Direction(i + 1, j + 1) = atand((y(1) - y(2)) / (x(1) - x(2)));
+        Period(i + 1, j + 1) = 1 / sqrt((y(1) - y(2))^2 + (x(1) - x(2)) ^ 2);
+%         [block_sorted, index] = sort(block_l(:), 'descend');
+%         [u, v] = ind2sub(size(block_l), index(1));
+%         [m, n] = ind2sub(size(block_l), index(2));
+%         if u == m && v == n
+%             Direction(i + 1, j + 1) = 0;
+%             Period(i + 1, j + 1) = 0;
+%             ROI(i + 1, j + 1) = 0;
+%         else
+%             ROI(i + 1, j + 1) = 1;
+%             Direction(i + 1, j + 1) = atand((n - v) / (m - u));
+%             Period(i + 1, j + 1) = 4 / sqrt((n - v) ^ 2 + (m - u) ^ 2);
+%         end
     end
 end
 DrawDir(1, Direction, sblock, 'b', ROI);
