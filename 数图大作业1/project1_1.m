@@ -35,12 +35,6 @@ N_pixel = floor(N / sblock);
 % 3*3均值滤波
 %I = imfilter(I, fspecial('average', [3, 3]));
 I = I(2:M - 1, 2:N - 1);
-% 初始化频率图，方向图，方差图等
-Frequency = zeros(M_pixel, N_pixel);
-Direction = zeros(M_pixel, N_pixel);
-%Variance = zeros(M_pixel, N_pixel);
-%Variance_ft = zeros(M_pixel, N_pixel);
-Flag = zeros(M_pixel, N_pixel);
 % 填充图像
 I = im2double(I);
 %I_padding = padarray(I, [(lblock - sblock) / 2,...
@@ -62,7 +56,8 @@ if image_id == 2
 else
     I = histeq(uint16(im2gray(I)));
 end
-figure, imshow(I, [])
+%figure, imshow(I, [])
+[Direction, Frequency] = cal_df(I, image_id, lblock, sblock);
 
 
 
@@ -75,36 +70,46 @@ figure, imshow(I, [])
 % Direction = 0.5 * atan2(Anglesin_f, Anglecos_f);
 
 %% 求方向频率图
-function
-for i = 0 : ceil(X / sblock) - 1
-    for j = 0 : ceil(Y / sblock) - 1
-        % 计算以小块为中心的大块的边际点坐标+特判
+function [Direction, Frequency] = cal_df(img, img_id, lblock, sblock)
+[M, N] = size(img);
+switch img_id
+    case 1
+        th = 5 * 10^3;
+    case 2
+        th = 2 * 10^3;
+    case 3
+        th = 2 * 10^3;
+end
+% 方向矩阵，分辨率为8
+Direction = zeros(ceil(M / sblock), ceil(N / sblock)); 
+Frequency = zeros(ceil(M / sblock), ceil(N / sblock)); % 频率
+for i = 0:ceil(M / sblock) - 1
+    for j = 0:ceil(N / sblock) - 1
         x0 = ((i * sblock - (lblock - sblock) / 2) < 1) + ((i * sblock - (lblock - sblock) / 2) >= 1) * (i * sblock - (lblock - sblock) / 2); 
         y0 = ((j * sblock - (lblock - sblock) / 2) < 1) + ((j * sblock - (lblock - sblock) / 2) >= 1) * (j * sblock - (lblock - sblock) / 2); 
         x1 = ((i * sblock + (lblock - sblock) / 2 + sblock - 1) > X) * X + ((i * sblock + 23) <= X) * (i * sblock + (lblock - sblock) / 2 + sblock - 1); 
-        y1 = ((j * sblock + (lblock - sblock) / 2 + sblock - 1) > Y) * Y + ((j * sblock + 23) <= Y) * (j * sblock + (lblock - sblock) / 2 + sblock - 1); 
-        % 当前大块
-        block_l = I(x0: x1, y0: y1);
-        %Variance(i + 1, j + 1) = std2(block_l);
-        block_l = abs(fftshift(fft2(block_l)));
-        % 对FFT结果进行排序
-        mean_FFT = mean(block_l);
-        [block_sorted, index] = sort(block_l(:), 'descend');
-        [u, v] = ind2sub(size(block_l), index(2));
-        [m, n] = ind2sub(size(block_l), index(3));
-        if u == m && v == n
-            Direction(i + 1, j + 1) = 0;
-            Frequency(i + 1, j + 1) = 0;
-        else
-            Direction(i + 1, j + 1) = atan2((n - v), (m - u));
-            Frequency(i + 1, j + 1) = sqrt(((n - v) / 2) ^ 2 + ((m - u) / 2)^ 2);
-            %temp = (block_l - mean_FFT);
-            %Variance_ft(i + 1, j + 1) = std2(block_l);
+        y1 = ((j * sblock + (lblock - sblock) / 2 + sblock - 1) > Y) * Y + ((j * sblock + 23) <= Y) * (j * sblock + (lblock - sblock) / 2 + sblock - 1);         
+        block = img(x0:x1, y0:y1);
+        block = abs(fftshift(fft2(block))); % 幅度谱
+        
+        if NUM ~= 2 % 图2无直流
+            [x, y] = find(block == max(max(block))); 
+            block(x,y) = 0; 
         end
-        if (Frequency(i + 1, j + 1) > 2 && Frequency(i + 1, j + 1) < 6)
-            Flag(i + 1, j + 1) = 1;
+        
+        [~, pos] = sort(block(:), 'descend');
+        [x1, y1] = ind2sub(size(block), pos(1));
+        [x2, y2] = ind2sub(size(block), pos(2));
+        
+        if block(x1, y1) > A_threshold
+            Direction(i + 1, j + 1) = atand((y1 - y2) / (x1 - x2)); % 方向值，取arctan
+            Frequency(i + 1, j + 1) = sqrt((y1 - y2)^2 + (x1 - x2)^2) / 2 / pi; % 频率与距离成正比
+        else
+            Direction(i + 1, j + 1) = 180; % 方向值，取arctan
+            Frequency(i + 1, j + 1) = 0; % 频率值
         end
     end
+end
 end
 
 %% 局部直方图均衡(用于图2) from teacher
@@ -235,6 +240,11 @@ end
 result = mask;
 end
 
+%% 平滑方向图
+function result = Smooth_d(img)
+result = img .* pi ./ 90;
+
+end
 %% 平滑频率图
 function result = Smooth(img)
 gf = fspecial('gaussian', [5, 5], 1);

@@ -47,58 +47,24 @@ I = im2double(I);
 %    (lblock - sblock) / 2], 255);
 [X, Y] = size(I);
 
-%% 图像分块与求取方向频率图
-for i = 0 : ceil(X / sblock) - 1
-    for j = 0 : ceil(Y / sblock) - 1
-        % 计算以小块为中心的大块的边际点坐标+特判
-        x0 = ((i * sblock - (lblock - sblock) / 2) < 1) + ((i * sblock - (lblock - sblock) / 2) >= 1) * (i * sblock - (lblock - sblock) / 2); 
-        y0 = ((j * sblock - (lblock - sblock) / 2) < 1) + ((j * sblock - (lblock - sblock) / 2) >= 1) * (j * sblock - (lblock - sblock) / 2); 
-        x1 = ((i * sblock + (lblock - sblock) / 2 + sblock - 1) > X) * X + ((i * sblock + 23) <= X) * (i * sblock + (lblock - sblock) / 2 + sblock - 1); 
-        y1 = ((j * sblock + (lblock - sblock) / 2 + sblock - 1) > Y) * Y + ((j * sblock + 23) <= Y) * (j * sblock + (lblock - sblock) / 2 + sblock - 1); 
-        % 当前大块
-        block_l = I(x0: x1, y0: y1);
-        %Variance(i + 1, j + 1) = std2(block_l);
-        block_l = abs(fftshift(fft2(block_l)));
-        % 对FFT结果进行排序
-        mean_FFT = mean(block_l);
-        [block_sorted, index] = sort(block_l(:), 'descend');
-        [u, v] = ind2sub(size(block_l), index(2));
-        [m, n] = ind2sub(size(block_l), index(3));
-        if u == m && v == n
-            Direction(i + 1, j + 1) = 0;
-            Frequency(i + 1, j + 1) = 0;
-        else
-            Direction(i + 1, j + 1) = atan2((n - v), (m - u));
-            Frequency(i + 1, j + 1) = sqrt(((n - v) / 2) ^ 2 + ((m - u) / 2)^ 2);
-            %temp = (block_l - mean_FFT);
-            %Variance_ft(i + 1, j + 1) = std2(block_l);
-        end
-        if (Frequency(i + 1, j + 1) > 2 && Frequency(i + 1, j + 1) < 6)
-            Flag(i + 1, j + 1) = 1;
-        end
-    end
-end
-% figure(1), imshow(Flag, [], 'InitialMagnification', 'fit')
-% figure(2), imshow(Frequency, 'InitialMagnification', 'fit')
-% figure(3), imshow(Direction, 'InitialMagnification', 'fit')
-
 %% 前背景分割
 mask = ImgMask(I, image_id, mblock);
-figure, imshow(I, [])%
+%figure, imshow(I, [])%
 if image_id == 2
-    %I = Bfilter(I); % 巴特沃斯滤波
+    I = Bfilter(I); % 巴特沃斯滤波
 end
 
-figure, imshow(I, [])%
+%figure, imshow(I, [])%
 I = double(I) .* double(mask); % 合并mask图
 figure, imshow(I, [])%
 if image_id == 2
-    I = double(I) .* double(mask);
     I = double(LocalHistEq(im2uint8(I))) .* double(mask);
 else
     I = histeq(uint16(im2gray(I)));
 end
-%figure, imshow(I)
+figure, imshow(I, [])
+
+
 
 %% 对方向频率图空域平滑滤波
 % Direction = 2 * Direction;
@@ -108,7 +74,70 @@ end
 % Anglesin_f = imfilter(sin(Direction), low_pass_gaussion);
 % Direction = 0.5 * atan2(Anglesin_f, Anglecos_f);
 
-%% 巴特沃斯滤波器（用于图2）
+%% 求方向频率图
+function [Direction, Frequency] = cal_df(img, img_id, lblock, sblock)
+[M, N] = size(img);
+switch img_id
+    case 1
+        th_1 = 5 * 10^3;
+    case 2
+        th_2 = 2 * 10^3;
+    case 3
+        th_3 = 2 * 10^3;
+end
+% 方向矩阵，分辨率为8
+Direction = zeros(ceil(M / sblock), ceil(N / sblock)); 
+Frequency = zeros(ceil(M / sblock), ceil(N / sblock)); % 频率
+for i = 0:ceil(M / sblock) - 1
+    for j = 0:ceil(N / sblock) - 1
+        x0 = ((i * sblock - (lblock - sblock) / 2) < 1) + ((i * sblock - (lblock - sblock) / 2) >= 1) * (i * sblock - (lblock - sblock) / 2); 
+        y0 = ((j * sblock - (lblock - sblock) / 2) < 1) + ((j * sblock - (lblock - sblock) / 2) >= 1) * (j * sblock - (lblock - sblock) / 2); 
+        x1 = ((i * sblock + (lblock - sblock) / 2 + sblock - 1) > X) * X + ((i * sblock + 23) <= X) * (i * sblock + (lblock - sblock) / 2 + sblock - 1); 
+        y1 = ((j * sblock + (lblock - sblock) / 2 + sblock - 1) > Y) * Y + ((j * sblock + 23) <= Y) * (j * sblock + (lblock - sblock) / 2 + sblock - 1);         
+        block = img(x0:x1, y0:y1);
+        block = abs(fftshift(fft2(block))); % 幅度谱
+        
+        if NUM ~= 2 % 图2无直流
+            [x, y] = find(block == max(max(block))); 
+            block(x,y) = 0; 
+        end
+        
+        [~, pos] = sort(block(:), 'descend');
+        [x1, y1] = ind2sub(size(block), pos(1));
+        [x2, y2] = ind2sub(size(block), pos(2));
+        
+        if block(x1, y1) > A_threshold
+            
+            Direction(i + 1, j + 1) = atand((y1 - y2) / (x1 - x2)); % 方向值，取arctan
+            Frequency(i + 1, j + 1) = sqrt((y1 - y2)^2 + (x1 - x2)^2) / 2 / pi; % 频率与距离成正比
+        else
+            Direction(i + 1, j + 1) = 180; % 方向值，取arctan
+            Frequency(i + 1, j + 1) = 0; % 频率值
+        end
+    end
+end
+end
+
+%% 局部直方图均衡(用于图2) from teacher
+function result = LocHistEq(img)
+I = img;
+% 局部直方图均衡化
+if 1
+    n = 1;% neighborhood size (2*n+1)*(2*n+1)
+    J2 = I;
+    [H, W] = size(I);
+    for r = 1+n:H-n
+        for c = 1+n:W-n
+            local_image = I(r-n:r+n,c-n:c+n);
+            new_local_image = histeq(local_image);
+            J2(r,c) = new_local_image(n+1,n+1);
+        end
+    end
+    result = J2;
+end
+end
+
+%% 巴特沃斯滤波器（用于图2）from teacher
 function result = Bfilter(img)
 % 用于第二幅图
 f = img;
@@ -205,13 +234,15 @@ if img_id == 3
     s = strel('disk', 10);
     mask =imdilate(mask, s);
 end
-if img_id == 2
-    mask = 
-end
 s = strel('disk', erode);
 mask = imerode(mask, s);% 腐蚀
 s = strel('disk', dilate);
 mask = imdilate(mask, s);% 膨胀
+if img_id == 2
+    mask_ = zeros(M, N);
+    mask_(200: 545, 170: 550) = mask(200: 545, 170: 550);
+    mask = mask_;
+end
 result = mask;
 end
 
