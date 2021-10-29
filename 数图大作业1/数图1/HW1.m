@@ -10,7 +10,7 @@ close all;
 % 循环处理图像，保存处理好的图像为NUM_after.jpg
 for NUM = 1:3
 finger_img = imread(int2str(NUM) + ".bmp"); % 读取图像
-%figure, imshow(finger_img, [], 'InitialMagnification','fit'), title('原图像');
+figure, imshow(finger_img, [], 'InitialMagnification','fit'), title('原图像');
 [height, width] = size(finger_img); % 获取图像长宽
 
 % 分割
@@ -24,8 +24,6 @@ if NUM == 2
     D0=140; % 用于第二幅图
     W=100;
     n=2;
-    H = bbpf(D0,W,n,P);
-    
     
     [DX, DY] = meshgrid(1:P, 1:P);
     D = sqrt((DX-P/2-1).^2+(DY-P/2-1).^2);
@@ -44,13 +42,6 @@ end
 finger_img = double(finger_img) .* double(mask); % 乘以蒙版操作
 %figure, imshow(finger_img, [], 'InitialMagnification','fit'), title('前景分割');
 
-if NUM ~= 2
-    finger_img = histeq(uint16(im2gray(finger_img))); % 直方图均衡化
-else
-    finger_img = double(LocalHistEq(im2uint8(finger_img))) .* double(mask); % 直方图均衡化
-end
-%figure, imshow(finger_img, 'InitialMagnification','fit'), title('直方图均衡化');
-
 % 参数代表归一化显示和适合图窗尺寸
 [direction, freq] = Get_Features(finger_img, height, width);
 %figure, imshow(direction, [], 'InitialMagnification','fit'), title('初始计算的方向图');
@@ -67,9 +58,7 @@ freq_smooth = Smooth(freq);
 % 增强
 finger_img_after = Enhance(finger_img, direc_smooth, freq_smooth, height, width);
 
-name = int2str(NUM) + "_after.png";
-
-imwrite(finger_img_after, int2str(NUM) + "_after.png");
+imwrite(finger_img_after, int2str(NUM) + "_after.jpg");
 end
 
 
@@ -206,11 +195,8 @@ for i = 0:ceil(height / SIZE_block) - 1
         [x1, y1] = ind2sub(size(A), pos(1));
         [x2, y2] = ind2sub(size(A), pos(2));
         
-        %if A(x(1), y(1)) > A_threshold
         if A(x1, y1) > A_threshold
-            %direction(i + 1, j + 1) = atand((y(1) - y(2)) / (x(1) - x(2))); % 方向值，取arctan
             direction(i + 1, j + 1) = atand((y1 - y2) / (x1 - x2)); % 方向值，取arctan
-            %freq(i + 1, j + 1) = sqrt((y(1) - y(2))^2 + (x(1) - x(2))^2) / 2 / pi; % 频率与距离成正比
             freq(i + 1, j + 1) = sqrt((y1 - y2)^2 + (x1 - x2)^2) / 2 / pi; % 频率与距离成正比
         else
             direction(i + 1, j + 1) = 180; % 方向值，取arctan
@@ -222,8 +208,6 @@ end
 
 % 方向图的平滑
 function result = DirectionSmooth(D)
-global NUM;
-
 result = D .* pi ./ 90; % 转化为弧度制
 D_sin = sin(result); % 接收弧度制
 D_cos = cos(result);
@@ -250,7 +234,7 @@ switch NUM
         a = 600;
         b = 4;
     case 2
-        freq_threshold = 60;
+        freq_threshold = 120;
         a = 600;
         b = 4;
     case 3
@@ -263,7 +247,7 @@ mag = zeros(height, width);
 phase = zeros(height, width);
 for i = 0:ceil(height / SIZE_block) - 1
     for j = 0:ceil(width / SIZE_block) - 1
-        % 计算以8*8小块为中心的32*32大块的左上右下点坐标，注意不要超出边界
+        % 计算8*8小块左上右下点坐标，注意不要超出边界
         x0 = ((i * SIZE_block - 8) < 1) + ...
             ((i * SIZE_block - 8) >= 1) * (i * SIZE_block - 8); % 左上角x坐标
         y0 = ((j * SIZE_block - 8) < 1) + ...
@@ -275,18 +259,19 @@ for i = 0:ceil(height / SIZE_block) - 1
         block = img(x0:x1, y0:y1);
         if freq(i + 1, j + 1) > freq_threshold % 去掉无指纹的区域
             [mag(x0:x1, y0:y1), phase(x0:x1, y0:y1)] = imgaborfilt(block, a / freq(i + 1, j + 1) + b, direc(i + 1, j + 1));
-            result(x0:x1, y0:y1) = mag(x0:x1, y0:y1) .* cos(phase(x0:x1, y0:y1));
-            R_max = max(max(result(x0:x1, y0:y1)));
-            R_min = min(min(result(x0:x1, y0:y1)));
-            result(x0:x1, y0:y1) = (result(x0:x1, y0:y1) - R_min) / (R_max - R_min);
+            block = mag(x0:x1, y0:y1) .* cos(phase(x0:x1, y0:y1));
+            result(i*8+1:i*8+8, j*8+1:j*8+8) = block(13:20, 13:20); % 取中心8x8
+            R_max = max(max(result(i*8+1:i*8+8, j*8+1:j*8+8)));
+            R_min = min(min(result(i*8+1:i*8+8, j*8+1:j*8+8)));
+            result(i*8+1:i*8+8, j*8+1:j*8+8) = (result(i*8+1:i*8+8, j*8+1:j*8+8) - R_min) / (R_max - R_min);
         else
-            result(x0:x1, y0:y1) = 0;
+            result(i*8+1:i*8+8, j*8+1:j*8+8) = 0;
         end
     end
 end
 
 % 高斯滤波平滑
-%figure, imshow(result, [], 'InitialMagnification', 'fit'), title('平滑前的图像');
+figure, imshow(result, [], 'InitialMagnification', 'fit'), title('平滑前的图像');
 Gaussian_filter = fspecial('Gaussian', [8, 8], 1);
 result = imfilter(result, Gaussian_filter, 'replicate', 'same');
 result = imbinarize(result, 0.5);

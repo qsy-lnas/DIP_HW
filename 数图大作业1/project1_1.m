@@ -4,7 +4,7 @@ clc;
 close all;
 
 %% select image
-image_id = 2;
+image_id = 1;
 
 %% Global variables
 % 源图片路径
@@ -13,7 +13,7 @@ image2_dir = '2.bmp';
 image3_dir = '3.bmp';
 file_type = '.bmp'; % 图片文件类型为bmp
 % other global variable
-sblock = 16;
+sblock = 8;
 lblock = 32;
 mblock = 4;
 
@@ -50,25 +50,64 @@ end
 
 %figure, imshow(I, [])%
 I = double(I) .* double(mask); % 合并mask图
-figure, imshow(I, [])%
+%figure, imshow(I, [])%
 if image_id == 2
-    I = double(LocalHistEq(im2uint8(I))) .* double(mask);
+    %I = double(LocalHistEq(im2uint8(I))) .* double(mask);
 else
     I = histeq(uint16(im2gray(I)));
 end
 %figure, imshow(I, [])
+%获取方向频率图
 [Direction, Frequency] = cal_df(I, image_id, lblock, sblock);
+%分别光滑滤波
+Direction = Smooth_d(Direction);
+Frequency = Smooth(uint8(255 / max(max(Frequency)) * Frequency));
+I = Enhance(I, Direction, Frequency, image_id, sblock, lblock);
+figure, imshow(I)
 
+%% 对原图进行图像增强
+function result = Enhance(img, dirc, freq, img_id, sblock, lblock)
+[M, N] = size(img);
+switch img_id
+    case 1
+        th = 120;
+        a = 600;
+        b = 4;
+    case 2
+        th = 60;
+        a = 600;
+        b = 4;
+    case 3
+        th = 60;
+        a = 600;
+        b = 4;
+end
+mg = zeros(M, N);
+ph = zeros(M, N);
+for i = 0: ceil(M / sblock) - 1
+    for j = 0: ceil(N / sblock) - 1
+        x0 = ((i * sblock - (lblock - sblock) / 2) < 1) + ((i * sblock - (lblock - sblock) / 2) >= 1) * (i * sblock - (lblock - sblock) / 2); 
+        y0 = ((j * sblock - (lblock - sblock) / 2) < 1) + ((j * sblock - (lblock - sblock) / 2) >= 1) * (j * sblock - (lblock - sblock) / 2); 
+        x1 = ((i * sblock + (lblock - sblock) / 2 + sblock - 1) > M) * M + ((i * sblock + 23) <= M) * (i * sblock + (lblock - sblock) / 2 + sblock - 1); 
+        y1 = ((j * sblock + (lblock - sblock) / 2 + sblock - 1) > N) * N + ((j * sblock + 23) <= N) * (j * sblock + (lblock - sblock) / 2 + sblock - 1);         
+        block = img(x0: x1, y0: y1);
+        if freq(i + 1, j + 1) > th
+            [mg(x0 : x1, y0 : y1), ph(x0: x1, y0 : y1)] = imgaborfilt(block, a / freq(i + 1, j + 1) + b, dirc(i + 1, j + 1));
+            block = mg(x0 : x1, y0: y1) .* cos(ph(x0 : x1, y0 : y1));
+            % 取中心
+            result(i * sblock + 1 : i * sblock + sblock, j * sblock + 1 : j * sblock + sblock) = block((lblock - sblock) / 2 + 1 : (lblock - sblock) / 2 + sblock); 
+            % 归一化
+            r_max = max(max(result(i * sblock + 1: i * sblock + sblock, j * sblock + 1 : j * sblock + sblock)));
+            r_min = min(min(result(i * sblock + 1: i * sblock + sblock, j * sblock + 1 : j * sblock + sblock)));
+            result(i * sblock + 1: i * sblock + sblock, j * sblock + 1 : j * sblock + sblock) = ...
+                (result(i * sblock + 1: i * sblock + sblock, j * sblock + 1 : j * sblock + sblock) - r_min) / (r_max - r_min);
+        else
+            result(i * sblock + 1: i * sblock + sblock, j * sblock + 1 : j * sblock + sblock) = 0;
+        end
+    end
+end
 
-
-%% 对方向频率图空域平滑滤波
-% Direction = 2 * Direction;
-% low_pass_gaussion = fspecial('gaussian', [5, 5], 7);
-% low_pass_average = fspecial('average', 5);
-% Anglecos_f = imfilter(cos(Direction), low_pass_gaussion);
-% Anglesin_f = imfilter(sin(Direction), low_pass_gaussion);
-% Direction = 0.5 * atan2(Anglesin_f, Anglecos_f);
-
+end
 %% 求方向频率图
 function [Direction, Frequency] = cal_df(img, img_id, lblock, sblock)
 [M, N] = size(img);
@@ -87,12 +126,12 @@ for i = 0:ceil(M / sblock) - 1
     for j = 0:ceil(N / sblock) - 1
         x0 = ((i * sblock - (lblock - sblock) / 2) < 1) + ((i * sblock - (lblock - sblock) / 2) >= 1) * (i * sblock - (lblock - sblock) / 2); 
         y0 = ((j * sblock - (lblock - sblock) / 2) < 1) + ((j * sblock - (lblock - sblock) / 2) >= 1) * (j * sblock - (lblock - sblock) / 2); 
-        x1 = ((i * sblock + (lblock - sblock) / 2 + sblock - 1) > X) * X + ((i * sblock + 23) <= X) * (i * sblock + (lblock - sblock) / 2 + sblock - 1); 
-        y1 = ((j * sblock + (lblock - sblock) / 2 + sblock - 1) > Y) * Y + ((j * sblock + 23) <= Y) * (j * sblock + (lblock - sblock) / 2 + sblock - 1);         
+        x1 = ((i * sblock + (lblock - sblock) / 2 + sblock - 1) > M) * M + ((i * sblock + 23) <= M) * (i * sblock + (lblock - sblock) / 2 + sblock - 1); 
+        y1 = ((j * sblock + (lblock - sblock) / 2 + sblock - 1) > N) * N + ((j * sblock + 23) <= N) * (j * sblock + (lblock - sblock) / 2 + sblock - 1);         
         block = img(x0:x1, y0:y1);
         block = abs(fftshift(fft2(block))); % 幅度谱
         
-        if NUM ~= 2 % 图2无直流
+        if img_id ~= 2 % 图2无直流
             [x, y] = find(block == max(max(block))); 
             block(x,y) = 0; 
         end
@@ -101,7 +140,7 @@ for i = 0:ceil(M / sblock) - 1
         [x1, y1] = ind2sub(size(block), pos(1));
         [x2, y2] = ind2sub(size(block), pos(2));
         
-        if block(x1, y1) > A_threshold
+        if block(x1, y1) > th
             Direction(i + 1, j + 1) = atand((y1 - y2) / (x1 - x2)); % 方向值，取arctan
             Frequency(i + 1, j + 1) = sqrt((y1 - y2)^2 + (x1 - x2)^2) / 2 / pi; % 频率与距离成正比
         else
@@ -243,7 +282,12 @@ end
 %% 平滑方向图
 function result = Smooth_d(img)
 result = img .* pi ./ 90;
-
+sine = sin(result);
+cosine = cos(result); % 分别求正余弦
+g_filter = fspecial('gaussian', [5, 5], 1);
+sine = imfilter(sine, g_filter, 'replicate', 'same');
+cosine = imfilter(cosine, g_filter, 'replicate', 'same'); % 分别光滑滤波
+result = atan2(sine, cosine) ./ pi .* 90 + 90; % 转回角度制
 end
 %% 平滑频率图
 function result = Smooth(img)
