@@ -4,7 +4,7 @@ clc;
 close all;
 
 %% select image
-image_id = 1;
+image_id = 2;
 
 %% Global variables
 % 源图片路径
@@ -24,6 +24,8 @@ switch image_id
         I = padarray(I, [3, 3], 255);
     case 2
         I = imread(image2_dir);
+        [M, N] = size(I);
+        I = I(40:M, 40:N);
     case 3
         I = imread(image3_dir);
 end
@@ -31,7 +33,7 @@ end
 M_pixel = floor(M / sblock);
 N_pixel = floor(N / sblock);
 % 3*3均值滤波
-I = imfilter(I, fspecial('average', [3, 3]));
+%I = imfilter(I, fspecial('average', [3, 3]));
 I = I(2:M - 1, 2:N - 1);
 % 初始化频率图，方向图，方差图等
 Frequency = zeros(M_pixel, N_pixel);
@@ -45,7 +47,35 @@ I = im2double(I);
 %    (lblock - sblock) / 2], 255);
 [X, Y] = size(I);
 
-%% 图像分块与求取方向频率图
+%% 前背景分割
+mask = ImgMask(I, image_id, mblock);
+%figure, imshow(I, [])%
+if image_id == 2
+    I = Bfilter(I); % 巴特沃斯滤波
+end
+
+%figure, imshow(I, [])%
+I = double(I) .* double(mask); % 合并mask图
+figure, imshow(I, [])%
+if image_id == 2
+    I = double(LocalHistEq(im2uint8(I))) .* double(mask);
+else
+    I = histeq(uint16(im2gray(I)));
+end
+figure, imshow(I, [])
+
+
+
+%% 对方向频率图空域平滑滤波
+% Direction = 2 * Direction;
+% low_pass_gaussion = fspecial('gaussian', [5, 5], 7);
+% low_pass_average = fspecial('average', 5);
+% Anglecos_f = imfilter(cos(Direction), low_pass_gaussion);
+% Anglesin_f = imfilter(sin(Direction), low_pass_gaussion);
+% Direction = 0.5 * atan2(Anglesin_f, Anglecos_f);
+
+%% 求方向频率图
+function
 for i = 0 : ceil(X / sblock) - 1
     for j = 0 : ceil(Y / sblock) - 1
         % 计算以小块为中心的大块的边际点坐标+特判
@@ -76,28 +106,27 @@ for i = 0 : ceil(X / sblock) - 1
         end
     end
 end
-% figure(1), imshow(Flag, [], 'InitialMagnification', 'fit')
-% figure(2), imshow(Frequency, 'InitialMagnification', 'fit')
-% figure(3), imshow(Direction, 'InitialMagnification', 'fit')
 
-%% 前背景分割
-mask = ImgMask(I, image_id, mblock);
-figure, imshow(mask)
-if image_id == 2
-    I = Bfilter(I);
+%% 局部直方图均衡(用于图2) from teacher
+function result = LocHistEq(img)
+I = img;
+% 局部直方图均衡化
+if 1
+    n = 1;% neighborhood size (2*n+1)*(2*n+1)
+    J2 = I;
+    [H, W] = size(I);
+    for r = 1+n:H-n
+        for c = 1+n:W-n
+            local_image = I(r-n:r+n,c-n:c+n);
+            new_local_image = histeq(local_image);
+            J2(r,c) = new_local_image(n+1,n+1);
+        end
+    end
+    result = J2;
 end
-I = double(I) .* double(mask);
+end
 
-
-%% 对方向频率图空域平滑滤波
-% Direction = 2 * Direction;
-% low_pass_gaussion = fspecial('gaussian', [5, 5], 7);
-% low_pass_average = fspecial('average', 5);
-% Anglecos_f = imfilter(cos(Direction), low_pass_gaussion);
-% Anglesin_f = imfilter(sin(Direction), low_pass_gaussion);
-% Direction = 0.5 * atan2(Anglesin_f, Anglecos_f);
-
-%% 巴特沃斯滤波器（用于图2）
+%% 巴特沃斯滤波器（用于图2）from teacher
 function result = Bfilter(img)
 % 用于第二幅图
 f = img;
@@ -127,13 +156,20 @@ switch img_id
     case 1
         th_var = 0.1;
         th_var_ft = 0.95;
+        erode = 10;
+        dilate = 15;
     case 2
-        th_var = 0;
-        th_var_ft = 0.5;
+        th_var = 0.12;
+        th_var_ft = 0.60;
+        erode = 22;
+        dilate = 39;
     case 3
         th_var = 0.1;
         th_var_ft = 0.9;
+        erode = 300;
+        dilate = 300;
 end
+
 [M, N] = size(img);
 mask = zeros(M, N); % mask图
 mask_M = ceil(M / mask_size);
@@ -160,7 +196,7 @@ v_ft = Smooth(v_ft);
 %求极值用于归一化
 v_max = max(max(v));
 v_ft_max = max(max(v_ft));
-v_min = min(min(v_ft));
+v_min = min(min(v));
 v_ft_min = min(min(v_ft));
 %归一化
 v = (v - v_min) / (v_max - v_min);
@@ -182,17 +218,6 @@ for i = 0: ceil(M / mask_size) - 1
     end
 end
 %使用形态学方法优化mask图
-switch img_id
-    case 1
-        erode = 4;
-        dilate = 5;
-    case 2
-        erode = 55;
-        dilate = 60;
-    case 3
-        erode = 300;
-        dilate = 300;
-end
 % 3先膨胀
 if img_id == 3
     s = strel('disk', 10);
@@ -202,6 +227,11 @@ s = strel('disk', erode);
 mask = imerode(mask, s);% 腐蚀
 s = strel('disk', dilate);
 mask = imdilate(mask, s);% 膨胀
+if img_id == 2
+    mask_ = zeros(M, N);
+    mask_(200: 545, 170: 550) = mask(200: 545, 170: 550);
+    mask = mask_;
+end
 result = mask;
 end
 
