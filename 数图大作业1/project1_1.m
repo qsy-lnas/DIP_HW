@@ -83,8 +83,9 @@ end
 %% 前背景分割
 mask = ImgMask(I, image_id, mblock);
 figure, imshow(mask)
-
-
+if image_id == 2
+    I = Bfilter(I);
+end
 I = double(I) .* double(mask);
 
 
@@ -96,7 +97,29 @@ I = double(I) .* double(mask);
 % Anglesin_f = imfilter(sin(Direction), low_pass_gaussion);
 % Direction = 0.5 * atan2(Anglesin_f, Anglecos_f);
 
+%% 巴特沃斯滤波器（用于图2）
+function result = Bfilter(img)
+% 用于第二幅图
+f = img;
+[M, N] = size(img);
+P = max(2 * [M N]);
+D0=140; 
+W=100;
+n=2;
 
+[DX, DY] = meshgrid(1:P, 1:P);
+D = sqrt((DX-P/2-1).^2+(DY-P/2-1).^2);
+H = 1./(1+((D.^2-D0^2)./(D*W+eps)).^(2*n));
+
+F = fftshift(fft2(f,P,P));
+G = F.*H;
+g = real(ifft2(ifftshift(G)));
+g = g(1:M,1:N);
+
+%figure,imshow(H,[],'巴特沃斯滤波器');
+%figure,imshow(g,[],'巴特沃斯滤波');
+result = g;
+end
 
 %% 计算前背景分割图
 function result = ImgMask(img, img_id, mask_size)
