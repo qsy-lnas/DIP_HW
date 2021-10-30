@@ -3,9 +3,9 @@ clear;
 clc;
 close all;
 
-%% select image
+%% select image %%
 image_id = 3;
-
+%----------------%
 %% Global variables
 % 源图片路径
 image1_dir = '1.bmp'; 
@@ -28,6 +28,8 @@ switch image_id
         I = I(40:M, 40:N);
     case 3
         I = imread(image3_dir);
+        sblock = 16;
+        lblock = 40;
 end
 [M, N] = size(I);
 M_pixel = floor(M / sblock);
@@ -51,7 +53,7 @@ end
 %figure, imshow(I, [])%
 I = double(I) .* double(mask); % 合并mask图
 figure, imshow(I, [])%
-if image_id == 2
+if image_id ~= 1
     I = double(LocalHistEq(im2uint8(I))) .* double(mask);
 else
     I = histeq(uint16(im2gray(I)));
@@ -60,9 +62,9 @@ figure, imshow(I, [])
 %获取方向频率图
 [Direction, Frequency] = cal_df(I, image_id, lblock, sblock);
 %分别光滑滤波
-figure, imshow(Direction, [], 'InitialMagnification','fit')
-figure, imshow(Frequency, [], 'InitialMagnification','fit')
-Direction = Smooth_d(Direction);
+%figure, imshow(Direction, [], 'InitialMagnification','fit')
+%figure, imshow(Frequency, [], 'InitialMagnification','fit')
+Direction = Smooth_d(Direction, image_id);
 Frequency = uint8(255 / max(max(Frequency)) * Frequency);
 Frequency = Smooth(Frequency);
 figure, imshow(Direction, [], 'InitialMagnification','fit')
@@ -92,9 +94,9 @@ switch img_id
         sz = 10;
     case 3
         th = 16;
-        a = 400;
-        b = 2;
-        sz = 15;
+        a = 800;
+        b = 5;
+        sz = 8;
 end
 result = zeros(M, N);
 mg = zeros(M, N);
@@ -236,7 +238,7 @@ switch img_id
         th_var = 0.28;
         th_var_ft = 0.9;
         erode = 100;
-        dilate = 106;
+        dilate = 100;
 end
 
 [M, N] = size(img);
@@ -305,11 +307,16 @@ result = mask;
 end
 
 %% 平滑方向图
-function result = Smooth_d(img)
+function result = Smooth_d(img, img_id)
 result = img .* pi ./ 90;
 sine = sin(result);
 cosine = cos(result); % 分别求正余弦
-g_filter = fspecial('gaussian', [5, 5], 1);
+if img_id == 3
+    g_filter = fspecial('gaussian', [20, 20], 1);
+else
+    g_filter = fspecial('gaussian', [5, 5], 1);
+end
+
 sine = imfilter(sine, g_filter, 'replicate', 'same');
 cosine = imfilter(cosine, g_filter, 'replicate', 'same'); % 分别光滑滤波
 result = atan2(sine, cosine) ./ pi .* 90 + 90; % 转回角度制
