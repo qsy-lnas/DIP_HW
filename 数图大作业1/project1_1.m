@@ -4,7 +4,7 @@ clc;
 close all;
 
 %% select image
-image_id = 2;
+image_id = 3;
 
 %% Global variables
 % 源图片路径
@@ -86,10 +86,10 @@ switch img_id
         b = 2;
         sz = 10;
     case 2
-        th = 50;
-        a = 400;
-        b = 4;
-        sz = 8;
+        th = 60;
+        a = 750;
+        b = 5;
+        sz = 10;
     case 3
         th = 60;
         a = 600;
