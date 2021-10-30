@@ -4,7 +4,7 @@ clc;
 close all;
 
 %% select image
-image_id = 1;
+image_id = 2;
 
 %% Global variables
 % 源图片路径
@@ -52,7 +52,7 @@ end
 I = double(I) .* double(mask); % 合并mask图
 figure, imshow(I, [])%
 if image_id == 2
-    %I = double(LocalHistEq(im2uint8(I))) .* double(mask);
+    I = double(LocalHistEq(im2uint8(I))) .* double(mask);
 else
     I = histeq(uint16(im2gray(I)));
 end
@@ -76,18 +76,20 @@ function [result, mask] = Enhance(img, dirc, freq, mask, img_id, sblock, lblock)
 [M_, N_] = size(img);
 M = ceil(M_ / sblock) * sblock;
 N = ceil(N_ / sblock) * sblock;
-img = padarray(img, [(M - M_) / 2, (N - N_) / 2], 'replicate');
-mask = padarray(mask, [(M - M_) / 2, (N - N_) / 2], 'replicate');
+img = padarray(img, [(M - M_), (N - N_)], 'replicate', 'post');
+mask = padarray(mask, [(M - M_), (N - N_)], 'replicate', 'post');
 switch img_id
     case 1
         %th = max(max(freq)) * 180 / 255;
         th = 20;
-        a = 400;
+        a = 300;
         b = 2;
+        sz = 10;
     case 2
-        th = 60;
-        a = 600;
+        th = 50;
+        a = 400;
         b = 4;
+        sz = 8;
     case 3
         th = 60;
         a = 600;
@@ -124,7 +126,7 @@ for i = 0: ceil(M / sblock) - 1
     end
 end
 % 再次平滑
-gf = fspecial('gaussian', [5, 5], 1);
+gf = fspecial('gaussian', [sz, sz], 1);
 result = imfilter(result, gf, 'replicate', 'same');
 result = imbinarize(result, 0.5);
 end
@@ -220,7 +222,7 @@ end
 function result = ImgMask(img, img_id, mask_size)
 switch img_id
     case 1
-        th_var = 0.1;
+        th_var = 0.12;
         th_var_ft = 0.95;
         erode = 10;
         dilate = 12;
