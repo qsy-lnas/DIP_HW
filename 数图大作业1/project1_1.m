@@ -91,9 +91,10 @@ switch img_id
         b = 5;
         sz = 10;
     case 3
-        th = 60;
-        a = 600;
-        b = 4;
+        th = 16;
+        a = 400;
+        b = 2;
+        sz = 15;
 end
 result = zeros(M, N);
 mg = zeros(M, N);
@@ -232,10 +233,10 @@ switch img_id
         erode = 22;
         dilate = 39;
     case 3
-        th_var = 0.1;
+        th_var = 0.28;
         th_var_ft = 0.9;
-        erode = 300;
-        dilate = 300;
+        erode = 100;
+        dilate = 106;
 end
 
 [M, N] = size(img);
