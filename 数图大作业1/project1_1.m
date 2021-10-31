@@ -4,7 +4,7 @@ clc;
 close all;
 
 %% select image %%
-image_id = 3;
+image_id = 2;
 %----------------%
 %% Global variables
 % 源图片路径
@@ -28,8 +28,8 @@ switch image_id
         I = I(40:M, 40:N);
     case 3
         I = imread(image3_dir);
-        sblock = 16;
-        lblock = 40;
+        sblock = 24;
+        lblock = 48;
 end
 [M, N] = size(I);
 M_pixel = floor(M / sblock);
@@ -43,7 +43,8 @@ I = im2double(I);
 %    (lblock - sblock) / 2], 255);
 [X, Y] = size(I);
 
-%% 前背景分割
+%% Process
+% 前背景分割
 mask = ImgMask(I, image_id, mblock);
 %figure, imshow(I, [])%
 if image_id == 2
@@ -52,12 +53,14 @@ end
 
 %figure, imshow(I, [])%
 I = double(I) .* double(mask); % 合并mask图
-figure, imshow(I, [])%
+imwrite(I, int2str(image_id) + "_masked.jpg");
+%figure, imshow(I, [])%
 if image_id ~= 1
     I = double(LocalHistEq(im2uint8(I))) .* double(mask);
 else
     I = histeq(uint16(im2gray(I)));
 end
+
 figure, imshow(I, [])
 %获取方向频率图
 [Direction, Frequency] = cal_df(I, image_id, lblock, sblock);
@@ -71,7 +74,8 @@ figure, imshow(Direction, [], 'InitialMagnification','fit')
 figure, imshow(Frequency, [], 'InitialMagnification','fit')
 [I, mask] = Enhance(I, Direction, Frequency, mask, image_id, sblock, lblock);
 I = double(I) .* double(mask);
-figure, imshow(I)
+%figure, imshow(I)
+imwrite(I, int2str(image_id) + "_processed.jpg");
 
 %% 对原图进行图像增强
 function [result, mask] = Enhance(img, dirc, freq, mask, img_id, sblock, lblock)
@@ -96,7 +100,7 @@ switch img_id
         th = 16;
         a = 800;
         b = 5;
-        sz = 8;
+        sz = 40;
 end
 result = zeros(M, N);
 mg = zeros(M, N);
@@ -312,7 +316,7 @@ result = img .* pi ./ 90;
 sine = sin(result);
 cosine = cos(result); % 分别求正余弦
 if img_id == 3
-    g_filter = fspecial('gaussian', [20, 20], 1);
+    g_filter = fspecial('gaussian', [24, 24], 1);
 else
     g_filter = fspecial('gaussian', [5, 5], 1);
 end
