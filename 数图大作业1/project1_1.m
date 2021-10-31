@@ -5,7 +5,7 @@ close all;
 
 %% select image %%
 %image_id = 1 2 3;
-image_id = 2;
+image_id = 3;
 %----------------%
 %% Global variables
 % 源图片路径
@@ -47,7 +47,7 @@ I = im2double(I);
 %% Process
 % 前背景分割
 mask = ImgMask(I, image_id, mblock);
-figure, imshow(I, [])%
+figure, imshow(double(I) .* double(mask), [])%
 imwrite(double(I) .* double(mask), int2str(image_id) + "_masked.jpg");
 if image_id == 2
     I = Bfilter(I); % 巴特沃斯滤波
@@ -58,7 +58,7 @@ I = double(I) .* double(mask); % 合并mask图
 
 %figure, imshow(I, [])%
 if image_id ~= 1
-    I = double(LocHistEq(im2uint8(I))) .* double(mask);
+    I = double(LocalHistEq(im2uint8(I))) .* double(mask);
 else
     I = histeq(uint16(im2gray(I)));
 end
