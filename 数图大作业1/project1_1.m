@@ -4,6 +4,7 @@ clc;
 close all;
 
 %% select image %%
+%image_id = 1 2 3;
 image_id = 2;
 %----------------%
 %% Global variables
@@ -46,17 +47,18 @@ I = im2double(I);
 %% Process
 % 前背景分割
 mask = ImgMask(I, image_id, mblock);
-%figure, imshow(I, [])%
+figure, imshow(I, [])%
+imwrite(double(I) .* double(mask), int2str(image_id) + "_masked.jpg");
 if image_id == 2
     I = Bfilter(I); % 巴特沃斯滤波
 end
 
 %figure, imshow(I, [])%
 I = double(I) .* double(mask); % 合并mask图
-imwrite(I, int2str(image_id) + "_masked.jpg");
+
 %figure, imshow(I, [])%
 if image_id ~= 1
-    I = double(LocalHistEq(im2uint8(I))) .* double(mask);
+    I = double(LocHistEq(im2uint8(I))) .* double(mask);
 else
     I = histeq(uint16(im2gray(I)));
 end
@@ -65,8 +67,8 @@ figure, imshow(I, [])
 %获取方向频率图
 [Direction, Frequency] = cal_df(I, image_id, lblock, sblock);
 %分别光滑滤波
-%figure, imshow(Direction, [], 'InitialMagnification','fit')
-%figure, imshow(Frequency, [], 'InitialMagnification','fit')
+figure, imshow(Direction, [], 'InitialMagnification','fit')
+figure, imshow(Frequency, [], 'InitialMagnification','fit')
 Direction = Smooth_d(Direction, image_id);
 Frequency = uint8(255 / max(max(Frequency)) * Frequency);
 Frequency = Smooth(Frequency);
@@ -74,7 +76,7 @@ figure, imshow(Direction, [], 'InitialMagnification','fit')
 figure, imshow(Frequency, [], 'InitialMagnification','fit')
 [I, mask] = Enhance(I, Direction, Frequency, mask, image_id, sblock, lblock);
 I = double(I) .* double(mask);
-%figure, imshow(I)
+figure, imshow(I)
 imwrite(I, int2str(image_id) + "_processed.jpg");
 
 %% 对原图进行图像增强
