@@ -21,7 +21,7 @@ save_other_poppy = "build_poppy_proc.jpg";
 save_other_autumn = "build_autumn_proc.jpg";
 save_other_sepia = "build_sepia_proc.jpg";
 % other global variable
-type = 3; 
+type = 1; 
 % type = 1,     2,      3
 % name = poppy, autumn, sepia
 %% generate LUT3D ini
