@@ -3,7 +3,7 @@ clear;
 clc;
 close all;
 % choose fig
-id = 2; % 1, 2, 3 
+id = 3; % 1, 2, 3 
 % other global variables
 threshold = [0.4943, 0.496, 0.499];
 epoch = [4 6 5];
@@ -31,7 +31,7 @@ img = imread(['r' num2str(id) '.bmp']);
 mask = immask(img, id);
 img = im2double(img);
 figure, imshow(img), title('Origin Figure')
-figure, imshow(mask), title('Mask')
+% figure, imshow(mask), title('Mask')
 
 
 %% Part1 脊线分割

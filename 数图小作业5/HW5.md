@@ -16,170 +16,285 @@
 
 1. 脊线分割部分利用形态学运算对缩放后的二值化图像的缺陷进行修整；
 1. 对脊线细化后应用老师课上讲到的方法并结合细节点进行处理
-1. 通过判断交会线的数量判断细节点，同时验证是否为伪细节点
+1. 通过判断交会线的数量判断细节点，同时通过综合信息验证是否为伪细节点
 
-由于我没有使用成功美图秀秀，于是使用了一个在线滤镜工具进行本次作业，网址如下：
-
-https://www.fotor.com.cn/photo-editor-beta/editor/basic
+> 更多处理图像在文件夹目录中，或是运行作业.m文件，通过修改参数`id`可以对不同的图像进行运算，以便查看中间过程输出，本报告中仅包含解释算法或表明效果的部分截图
+>
 
 #### 2.算法具体实现
 
 ```matlab
-%% generate LUT3D ini
-lut_ini = zeros(512, 512, 3);
-for i = 1:8
-    for j = 1:8
-        for m = 1:64
-            for n = 1:64
-                lut_ini((i - 1) * 64 + m, (j - 1) * 64 + n, 1) ...
-                    = 4 * (n - 1) + 3;
+%% Part1 脊线分割
+% 二值化
+img = Binarize(img, threshold(id));
+%figure, imshow(img), title('二值化')
+% 形态学运算
+img = imresize(img, 4, 'nearest');
+se1 = strel('disk', disk(id));
+se2 = [0, 1, 0; 1, 1, 1; 0, 1, 0];
+img = imopen(img, se1);
+img = imdilate(img, se2);
+imclose(img, se1);
+img = imresize(img, 0.25, 'bilinear');
+img = im2double(img);
+img = Binarize(img, threshold(id));
+img = ~bwareaopen(~img, 8, 4);
+figure, imshow(img), title('形态学运算')
+```
+
+本段代码通过进行二值化与形态学运算处理给定的指纹图像，为了提高形态学处理的精度，我使用了将原图放大后在进行形态学运算的方式。这样既可以获得更高的精度，又可以精确的调节参数处理细节，有助于提升效果。值得一提的是，为了确保转换图像大小不损失精度与较多的指纹信息，我经过分析认为从小到大的方向应当使用最近邻以便保全指纹图像的二值信息，避免过多插值导致模糊；而从大到小的方向由于进行了运算处理，应当使用精度更高的二次线性插值进行缩小。
+
+```matlab
+%% Part2 脊线细化
+% 形态学细化
+img = bwmorph(img, 'thin', inf);
+img = bwskel(img);
+%figure, imshow(img), title('脊线细化')
+% 细化后处理
+cnt = 0;
+x1 = img;
+while(cnt < epoch(id))
+    x1 = x1 - (horm(x1, B(:, :, 1), ~B(:, :, 1)));
+    x1 = x1 - (horm(x1, B(:, :, 2), ~B(: ,: ,2)));
+    x1 = x1 - (horm(x1, B(: ,: ,3), ~B(: ,: ,3)));
+    x1 = x1 - (horm(x1, B(: ,:, 4), ~B(: ,:, 4)));
+    x1 = x1 - (horm(x1, B(:, :, 5), ~B(: ,: ,5)));
+    x1 = x1 - (horm(x1, B(: ,: ,6), ~B(: ,: ,6)));
+    x1 = x1 - (horm(x1, B(: ,:, 7), ~B(: ,: ,7)));
+    x1 = x1 - (horm(x1, B(: ,: ,8), ~B(: ,:, 8)));
+    cnt = cnt + 1;
+end
+cnt = 0;
+x2 = horm(x1, B(: , :, 1), ~B(: ,: ,1)) | ...
+    horm(x1, B(: ,:, 2), ~B(:, :, 2)) | ...
+    horm(x1, B(: ,:, 3), ~B(:, :, 3)) | ...
+    horm(x1, B(: ,:, 4), ~B(:, :, 4)) | ...
+    horm(x1, B(:, :, 5), ~B(:, :, 5)) | ...
+    horm(x1, B(:, :, 6), ~B(:, :, 6)) | ...
+    horm(x1, B(:, :, 7), ~B(:, :, 7)) | ...
+    horm(x1, B(: ,:, 8), ~B(:, :, 8));
+x3 = imdilate(x2, strel('square', 3));
+while(cnt < epoch(id))
+    x3 = imdilate(x3, strel('square', 3)) & img;
+    cnt = cnt + 1;
+end
+img = x1 | x3;
+
+figure, imshow(img), title('细化后处理')
+% 消短线
+img = bwareaopen(img, 4, 8);
+[M, N] = size(img);
+hit = img;
+for i = 1: l(id) % 消减长度维l
+    temp = hit;
+    for j = 1: size(E)
+        e = E(:, :, 1);
+        e = squeeze(e);
+        p = bwhitmiss(hit, e);
+        temp = bitand(temp, (1 - p));
+    end
+    hit = temp;
+end
+%figure, imshow(hit), title('消短线-修剪')
+
+ends = bwmorph(hit, 'endpoints', inf);
+se = strel('square', 3);
+dilate = imdilate(ends, se);
+for i = 1: l(id) - 1
+    dilate = bitand(dilate, img);
+    dilate = imdilate(dilate, se);
+end
+dilate = bitand(dilate, img);
+img = bitor(dilate, hit);
+%figure, imshow(img), title('消短线-膨胀')
+% 分叉点消短线
+branches = zeros(0, 2); % 分叉点
+for i = 2: M - 1
+    for j = 2 : N - 1
+        if img(i, j) == 1
+            x1 = i - 1;
+            x2 = i + 1;
+            y1 = j - 1;
+            y2 = j + 1;
+            br = (abs(img(x1, j) - img(x1, y1)) + ...
+                abs(img(x1, y2) - img(x1, j)) + ...
+                abs(img(i, y2) - img(x1, y2)) + ...
+                abs(img(x2, y2) - img(i, y2)) + ...
+                abs(img(x2, j) - img(x2, y2)) + ...
+                abs(img(x2, y1) - img(x2, j)) + ...
+                abs(img(i, y1) - img(x2, y1)) + ...
+                abs(img(x1, y1) - img(i, y1))) / 2;
+            if br == 3
+                branches = [branches; i j]; %#ok<AGROW> 
             end
-            lut_ini((i - 1) * 64 + m, (j * 64 - 63: j * 64), 2)...
-                = 4 * (m - 1) + 3;
-        end
-        lut_ini((i * 64 - 63: i * 64), (j * 64 - 63: j* 64), 3) ...
-            = 32*(i - 1) + 4 * (j - 2);
-    end
-end
-lut_ini = uint8(lut_ini);
-%figure(1), imshow(lut_ini);
-imwrite(lut_ini, image_dir, "jpg");
-```
-
-本段代码通过循环写入生成不变滤镜的LUT以便实现后续工作。
-
-```matlab
-%% 将LUT图转换为对应的RGB图片 512*512 -> 256*256*256
-function lut3D = trlut(lut)
-lut3D = uint8(zeros(256, 256, 256, 3));
-a = uint8(zeros(64, 64, 64, 3));
-for i = 1:64
-    for j = 1:64
-        for k = 1:64
-            a(j, k, i,:) = lut(floor((i-1)/8)*64+k, mod(i-1, 8)*64+j, :);
         end
     end
 end
-lut3D(:, :, :, 1) = imresize3(a(:, :, :, 1), [256 256 256]);
-lut3D(:, :, :, 2) = imresize3(a(:, :, :, 2), [256 256 256]);
-lut3D(:, :, :, 3) = imresize3(a(:, :, :, 3), [256 256 256]);
-end
 
+%% 结合分叉点去短线
+for i = 1 : size(branches)
+    img(branches(i, 1), branches(i, 2)) = 0;
+end
+img = bwareaopen(img, 4, 8);
+for i = 1 : size(branches)
+    img(branches(i, 1), branches(i, 2)) = 1;
+end
+img = bwareaopen(img, 4, 8);
+figure, imshow(img), title('消短线')
 ```
 
-本段代码是整个程序较为核心的部分，主要负责将LUT图像转换为对应的RGB图像，以针对待运算图片进行直接的查找与转换。
+本段代码主要实现的功能是进行指纹图形的细化以及细化后的处理以及消除短线等情况。除了老师课上讲到的细化后处理方式以及收缩膨胀的消短线方式，我还附加了针对分叉点处的特殊处理：即可以通过先将细节点置零，在进行形态学连通开运算，以消去较小的非连通分量，这样，通过伪分叉点出发的短线就可以被完美的去除，之后恢复分叉点后再进行一次连通开运算就可以将伪分叉点去除。经过实际比较，确实可以通过此方法消除掉很多分叉点处的短细线。
 
 ```matlab
-%% 对输入图像Img做LUT变换，lut为256*256*256*3
-function img_proc = imlut(img, lut)
-[a, b, c] = size(img);
-img_proc = uint8(zeros(a, b, c));
-for i = 1:a
-    for j = 1:b
-        R = img(i, j, 1);
-        G = img(i, j, 2);
-        B = img(i, j, 3);
-        img_proc(i, j, :) = lut(R+1, G+1, B+1, :);
+%% 细节点检测
+ends = zeros(0, 2); % 端点
+branches = zeros(0, 2); % 分叉点
+for i = 2: M - 1
+    for j = 2 : N - 1
+        if img(i, j) == 1
+            x1 = i - 1;
+            x2 = i + 1;
+            y1 = j - 1;
+            y2 = j + 1;
+            br = (abs(img(x1, j) - img(x1, y1)) + ...
+                abs(img(x1, y2) - img(x1, j)) + ...
+                abs(img(i, y2) - img(x1, y2)) + ...
+                abs(img(x2, y2) - img(i, y2)) + ...
+                abs(img(x2, j) - img(x2, y2)) + ...
+                abs(img(x2, y1) - img(x2, j)) + ...
+                abs(img(i, y1) - img(x2, y1)) + ...
+                abs(img(x1, y1) - img(i, y1))) / 2;
+            if br == 1
+                ends = [ends; i j]; %#ok<AGROW> 
+            end
+            if br == 3
+                branches = [branches; i j]; %#ok<AGROW> 
+            end
+        end
     end
 end
+img = im2double(img);
+fulimg = img;
+for i = 1: size(ends)
+    fulimg = insertShape(fulimg, 'circle', [ends(i, 2), ends(i, 1), 4], 'LineWidth', 1, 'Color', 'red');
 end
+for i = 1: size(branches)
+    fulimg =  insertShape(fulimg, 'circle', [branches(i, 2), branches(i, 1), 4], 'LineWidth', 1, 'Color', 'yellow');
+end
+figure, imshow(fulimg), title('细节点检测')
+
+%% 细节点验证
+% 端点
+for i = 1: size(ends)
+    flag = 1;
+    x0 = ends(i, 1) - 3;
+    x1 = ends(i, 1) + 3;
+    y0 = ends(i, 2) - 3;
+    y1 = ends(i, 2) + 3;
+    % 删去边缘点
+    if sum(sum(mask(x0 : x1, y0 : y1))) < 40
+        flag = 0;
+    end
+    % 删去断线端点
+    [idx, ~] = find(abs(ends(:, 1) - ends(i, 1)) <= 6);
+    [idy, ~] = find(abs(ends(:, 2) - ends(i, 2)) <= 6);
+    if sum(intersect(idx, idy)) - i > 0
+        flag = 0;
+    end
+    % 删去假端点
+    for x = x0 : x1
+        for y = y0 : y1
+            [idx, ~] = find(branches(:, 1) == x);
+            if branches(idx, 2) == y
+                flag = 0;
+                break
+            end
+        end
+    end
+    if flag
+        img = insertShape(img, 'circle', [ends(i, 2), ends(i, 1), 4], 'LineWidth', 1, 'Color', 'red');
+    end
+end
+% 分叉点
+for i = 1 : size(branches)
+    flag = 1;
+    x0 = branches(i, 1) - 3;
+    x1 = branches(i, 1) + 3;
+    y0 = branches(i, 2) - 3;
+    y1 = branches(i, 2) + 3;
+    % 删去边缘点
+    if sum(sum(mask(x0 : x1, y0 : y1))) < 40
+        flag = 0;
+    end
+    % 删去假分叉点
+    for x = x0 : x1
+        for y = y0 : y1
+            [idx, ~] = find(ends(:, 1) == x);
+            for j = 1 : size(idx)
+                if ends(idx(j), 2) == y
+                    flag = 0
+                    break
+                end
+            end
+%             if ends(idx, 2) == y
+%                 flag = 0;
+%                 break
+%             end
+        end
+    end
+    if flag
+        img = insertShape(img, 'circle', [branches(i, 2), branches(i, 1), 4], 'LineWidth', 1, 'Color', 'yellow');
+    end
+end
+figure, imshow(img), title('细节点验证')
 ```
 
-本段代码就是利用上述工作得到的LUT图对于待处理图片进行处理的过程。
+本段代码主要是针对细节点的检测与验证算法，通过老师课上给出的细节点检测公式可以得到全部的端点与分叉点，之后通过排除掉指纹图形边缘的点，在排除掉假的点从而得到验证后的结果。
 
 #### 3.实验结果与分析
 
-<img src="HW4.assets/image-20211111234411693.png" alt="image-20211111234411693" style="zoom:50%;" />
+**分析二值化与形态学运算结果**
 
-由上图可以看到，我的算法对于该滤镜进行了较好的实现，更多附图见文件夹中。
+<img src="HW5.assets/image-20211121161543605.png" alt="image-20211121161543605" style="zoom:30%;" /><img src="HW5.assets/image-20211121161459076.png" alt="image-20211121161459076" style="zoom:30%;" />
 
-本图的右侧两幅小图为原图，中间两幅为在线滤镜网站的结果，右侧两幅为我的处理结果。
+可以看到，经过形态学运算，原指纹图形较好的变为了二值化图像，但由于原图的分辨率有限，有部分色块会导致指纹脊线断开或是出现异常，已经通过算法尽力的减小异常，剩余的部分交由后续处理手段处理。
 
-但仍旧有的问题在于转换后的图片有些抽象，对于颜色的处理并不平滑，我仔细分析了原因后认为有以下两个可能：
+**脊线细化与细化后处理**
 
-1. 首先是在在线滤镜的过程中可能会有对于照片的平滑处理与改善，而我的函数仅仅对照片按照LUT进行了颜色的映射，可能导致颜色的变化不均匀从而图片观感不佳。
+<img src="HW5.assets/image-20211121163126900.png" alt="image-20211121163126900" style="zoom:50%;" />
 
-2. 其次是jpg图片的保存逻辑可能由于压缩这一操作的存在使得LUT文件中的颜色产生了相邻之间的变化与混叠，甚至互相干扰，从而导致了部分颜色的失真。而这样一种存储的失真又会通过LUT实现过程中的插值加以放大，因此最终的效果与在线实现的略有偏差。之后我使用bmp格式的图片进行了一次小实验，发现效果确实有所改观，不过由于时间关系我就没来得及更改我的作业中的实现方式，不过想必是殊途同归的。
+在进行指纹细化及细化后处理后，整体的脊线脉络很清晰的呈现出来，不过仍有一些局部短线或是噪点存在，下面应用去短线算法对局部短线噪声等进行处理：
 
-   
+<img src="HW5.assets/image-20211121163623211.png" alt="image-20211121163623211" style="zoom:50%;" />
 
-### Problem2
+可以看到，途中通过黄颜色红圈标注出的细节处均有短线或是噪点存在，应用上文提到的针对短线进行综合处理的算法后，可以得到如下图所示的结果：
 
-#### **1.算法要点与理论原理**
+<img src="HW5.assets/image-20211121163749902.png" alt="image-20211121163749902" style="zoom:50%;" />
 
-我认为本次作业第二题主要有以下几个要点：
+可以发现，图中标注的的噪点与短线已经被全部消除了，并且消除后的指纹脊线十分平和顺滑。这里需要提到的是，针对这几种短线，需要综合运用我上文提到的两周思路才能完全消除，仅应用缩短后膨胀的方式有些处会被回复回来，但利用了分叉点的信息后，就可以得到很理想的结果了。
 
-1. 对待转换的人像进行适当参数的处理，从而得到带变换衣服的mask图，利用mask图与设定的参数，对人的衣服进行重新上色，从而改变衣服的颜色
+**细节点检测与验证**
 
-针对以上我认为以及实现过程中遇到的算法要点，我才用了以下的算法原理加以解决：
+直接运用老师上课讲到的细节点检测算法会导致检测出很多无效的细节点，诸如下图所示：
 
-1. 主要是对于mask图的分割是比较困难的，于是我想到了老师上课时进行的课堂演示，通过HSV格式的图片的不同分量的特征，可以显著的将衣服与人身体和周边环境区分开，于是，我针对每张图片的特定参数，对HSV分量进行分别处理，得到mask图后进行改变颜色。
+<img src="HW5.assets/image-20211121164441589.png" alt="image-20211121164441589" style="zoom:40%;" />
 
-#### 2.算法具体实现
+很显然图中有大量指纹边缘导致的非细节点，与指纹脊线弯折导致的假细节点，尤其是线上的细小突起被识别为分叉点与端点，为了消除这些无效的细节点，我通过分类判断，依次消除掉图形边缘的细节点（通过点周围有效面积结合指纹图像的mask图进行判断），分叉点与端点过近的无效点。经过上述算法的处理后，可以得到下图所示的局部细节点：
 
-```matlab
-function mask = immask(app)
-            image = imread(app.image_dir);
-            app.Image1.ImageSource = image; % renew the origin pic
-            image = rgb2hsv(image);
-            [h, w, ~] = size(image);
-            sizemask = zeros(h, w);
-            sizemask(app.sizeroi(1) : app.sizeroi(2), app.sizeroi(3): app.sizeroi(4)) = 1;
-            %figure(1); imshow(sizemask)
-            hsvmask = (image(:, :, 1) > app.hsvroi(1)) .* (image(:, :, 1) < app.hsvroi(2));
-            %figure(2); imshow(hsvmask)
-            hsvmask = hsvmask .* (image(:, :, 2) > app.hsvroi(3)) .* (image(:, :, 2) < app.hsvroi(4));
-            %figure(3); imshow(hsvmask)
-            hsvmask = hsvmask .* (image(:, :, 3) > app.hsvroi(5)) .* (image(:, :, 3) < app.hsvroi(6));
-            %figure(4); imshow(hsvmask)
-            app.hsvroi
-            mask = sizemask .* hsvmask;
-            se = strel('disk', 1);
-            mask = bwareaopen(mask, app.th, 8); % 清除噪点
-            mask = imdilate(mask, se);
-```
+<img src="HW5.assets/image-20211121165118175.png" alt="image-20211121165118175" style="zoom:40" />
 
-本段代码实现的就是获取mask图的过程，通过圈定衣服的ROI范围并结合HSV三通道的数据关系，就可以比较准确的获取衣服的mask图。
-
-```matlab
-function renew_image(app)
-            image = imread(app.image_dir);
-            image = rgb2hsv(image);
-            [h, w, ~] = size(image);
-            image(find(app.mask)) = app.HueSlider.Value ./ 360; %#ok<FNDSB> 
-            image(find(app.mask) + h * w) = app.SaturationSlider.Value;
-            image_processed = hsv2rgb(image);
-            app.Image2.ImageSource = image_processed;
-            
-        end
-```
-
-本段代码是基于上述获得的mask图并利用当前选择的参数进行衣服重新上色的计算，计算的过程严格基于HSV的公式进行。
-
-#### 3.实验结果与分析
-
-本次实验的全部结果见名为2的文件夹中，下附一张图片以说明：
-
-<img src="HW4.assets/6.2.png" alt="6.2" style="zoom:50%;" />
-
-本图片的上方小图为原图，本张图片我对于围巾进行了处理，很好的得到了围巾的mask图，并且排除了阴影部分，使得图片的不同颜色的重新上色都具有很好的效果。
+可以看到，上述算法不仅很好的消除了边缘的非细节点，也很好地处理了由于脊线弯折与波动带来的假细节点。
 
 #### 4.收获
 
-本次作业让我对于数字图像的颜色有了全新的理解，能够熟练地使用LUT的处理方式与HSV的图片格式，对于颜色与数字图像处理有了更深刻的认识。
-
-也在使用LUT进行颜色变换的过程中，认识到了不同图像存储格式对于压缩带来的不同于影响，之后应当在学习工作中予以注意。
+本次作业让我对形态学运算的灵活使用有了全新的理解，尤其是开闭等基础的形态学运算经过灵活使用后，可以起到巨大的作用。也使得我对处理二值指纹图像有了一定的经验和体会。
 
 #### 5.可能的改进方向
 
 我认为我本次作业的完成质量还是比较可观的，有以下几个方面由于时间与能力的不足，我认为后续还可以加以提高：
 
-1. 可以实现更佳自动化的mask图
-1. 可以调整第一题LUT图像的存储格式以获得更好的效果
+1. 可以针对不同色块实现更加准确的二值处理，以解决由于原图像色块之间灰度差异的问题，从而得到更加平滑连续的二值化图像，便于后续处理。
 
-#### 6.参考资料
 
-在线取色器：http://www.jiniannet.com/Page/allcolor
 
-在线取点器：https://uutool.cn/img-coord/
-
+###### 
