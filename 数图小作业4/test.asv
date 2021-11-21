@@ -1,3 +1,0 @@
-
-a = num2str(2) + ''
-image = imread("2.jpg");
